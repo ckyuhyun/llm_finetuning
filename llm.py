@@ -2,7 +2,11 @@ import pandas as pd
 import os
 import re
 import numpy as np
-from transformers import AutoTokenizer
+from transformers import (
+    AutoTokenizer,
+    AutoModelForQuestionAnswering,
+    TrainingArguments,
+    Trainer)
 
 data_src_path = 'data_sets'
 
@@ -11,8 +15,8 @@ file_path = os.path.join(data_src_path, 'LLM_Materials.xlsx')
 if not os.path.isfile(file_path):
     raise f'{file_path} is not existed'
 
-
-tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
+model_path = "distilbert/distilbert-base-uncased"
+tokenizer = AutoTokenizer.from_pretrained(model_path)
 
 def update_answer_pos(dataSet: pd.DataFrame) -> pd.DataFrame:
     reference_context = None
@@ -99,7 +103,34 @@ valid_columms = ['context', 'question', 'answer', 'answer_pos']
 valid_ds = pd.DataFrame(final_dataSet, columns=valid_columms)
 
 token_ds = tokenizing(valid_ds)
+model = AutoModelForQuestionAnswering.from_pretrained(model_path)
 
+
+
+training_args = TrainingArguments(
+    output_dir=f"fine_llm_result",
+    evaluation_strategy = "epoch",
+    learning_rate=2e-5,
+    per_device_train_batch_size=8,
+    per_device_eval_batch_size=8,
+    num_train_epochs=2,
+    weight_decay=0.01,
+)
+
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset= token_ds,
+    #eval_dataset=tokenized_datasets["validation"].select(range(100)),
+    #data_collator=data_collator,
+    tokenizer=tokenizer
+    #train_dataset=small_train_dataset,
+    #eval_dataset=small_eval_dataset,
+    #compute_metrics=compute_metrics,
+)
+
+trainer.train()
 
 
 pass
