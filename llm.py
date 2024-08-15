@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import re
 import numpy as np
+from datasets import load_dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForQuestionAnswering,
@@ -83,7 +84,7 @@ def tokenizing(ds:pd.DataFrame):
                                                         # Each sequence can be a string or a list of strings (pretokenized string).
                                                         # If the sequences are provided as list of strings (pretokenized),
                                                         # you must set is_split_into_words=True (to lift the ambiguity with a batch of sequences).
-                                )
+                              return_tensors="tf")
 
 
 
@@ -103,6 +104,7 @@ valid_columms = ['context', 'question', 'answer', 'answer_pos']
 valid_ds = pd.DataFrame(final_dataSet, columns=valid_columms)
 
 token_ds = tokenizing(valid_ds)
+print(token_ds)
 model = AutoModelForQuestionAnswering.from_pretrained(model_path)
 
 
@@ -117,11 +119,13 @@ training_args = TrainingArguments(
     weight_decay=0.01,
 )
 
+traing_ds = load_dataset(token_ds)
+
 
 trainer = Trainer(
     model=model,
     args=training_args,
-    train_dataset= token_ds,
+    train_dataset= traing_ds,
     #eval_dataset=tokenized_datasets["validation"].select(range(100)),
     #data_collator=data_collator,
     tokenizer=tokenizer
