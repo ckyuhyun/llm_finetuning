@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import re
+import datasets
 import numpy as np
 from transformers import (
     AutoTokenizer,
@@ -74,9 +75,17 @@ def cleaning_dataset(dataSet: pd.DataFrame) -> pd.DataFrame:
     return filtered_dataset
 
 
-def tokenizing(ds:pd.DataFrame):
-    data = list(ds['context'].values) + list(ds['question'])
-    return tokenizer.tokenize(data,
+def tokenizing(examples):
+    # return tokenizer(
+    #     examples['question'],
+    #     examples["context"],
+    #     max_length=384,
+    #     truncation="only_second",
+    #     return_offsets_mapping=True,
+    #     padding="max_length",
+    # )
+    return tokenizer(examples['question'],
+                              examples['context'],
                               padding=True,
                               truncation=True,
                               is_split_into_words=True, # The sequence or batch of sequences to be encoded.
@@ -102,7 +111,9 @@ valid_columms = ['context', 'question', 'answer', 'answer_pos']
 #remaing_columms = ['question', 'start_pos', 'context', 'answer']
 valid_ds = pd.DataFrame(final_dataSet, columns=valid_columms)
 
-token_ds = tokenizing(valid_ds)
+train_dataset = datasets.Dataset.from_pandas(valid_ds)
+
+token_ds = train_dataset.map(tokenizing, batched=True, remove_columns=train_dataset.column_names)
 model = AutoModelForQuestionAnswering.from_pretrained(model_path)
 
 
