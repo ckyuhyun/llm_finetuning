@@ -76,22 +76,14 @@ def cleaning_dataset(dataSet: pd.DataFrame) -> pd.DataFrame:
 
 
 def tokenizing(examples):
-    # return tokenizer(
-    #     examples['question'],
-    #     examples["context"],
-    #     max_length=384,
-    #     truncation="only_second",
-    #     return_offsets_mapping=True,
-    #     padding="max_length",
-    # )
-    return tokenizer(examples['question'],
-                              examples['context'],
-                              padding=True,
-                              truncation=True,
-                              is_split_into_words=True, # The sequence or batch of sequences to be encoded.
-                                                        # Each sequence can be a string or a list of strings (pretokenized string).
-                                                        # If the sequences are provided as list of strings (pretokenized),
-                                                        # you must set is_split_into_words=True (to lift the ambiguity with a batch of sequences).
+     return tokenizer(examples['question'],
+              examples['context'],
+              padding=True,
+              truncation=True,
+              is_split_into_words=True, # The sequence or batch of sequences to be encoded.
+                                        # Each sequence can be a string or a list of strings (pretokenized string).
+                                        # If the sequences are provided as list of strings (pretokenized),
+                                        # you must set is_split_into_words=True (to lift the ambiguity with a batch of sequences).
                                 )
 
 
