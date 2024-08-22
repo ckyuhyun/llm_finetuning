@@ -75,16 +75,27 @@ def cleaning_dataset(dataSet: pd.DataFrame) -> pd.DataFrame:
     return filtered_dataset
 
 
-def tokenizing(examples):
-     return tokenizer(examples['question'],
-              examples['context'],
-              padding=True,
-              truncation=True,
-              is_split_into_words=True, # The sequence or batch of sequences to be encoded.
+#def tokenizing(examples):
+def tokenizing(context, question):
+    input =   tokenizer(#examples['question'],
+                      #examples['context'],
+                        question,
+                    context,
+                      max_length=384,
+                      padding=True,
+                      truncation=True,
+                      add_special_tokens=True,
+                      #is_split_into_words=True, # The sequence or batch of sequences to be encoded.
                                         # Each sequence can be a string or a list of strings (pretokenized string).
                                         # If the sequences are provided as list of strings (pretokenized),
                                         # you must set is_split_into_words=True (to lift the ambiguity with a batch of sequences).
                                 )
+    start_pos = []
+    end_pos = []
+    return input
+
+
+
 
 
 
@@ -105,7 +116,8 @@ valid_ds = pd.DataFrame(final_dataSet, columns=valid_columms)
 
 train_dataset = datasets.Dataset.from_pandas(valid_ds)
 
-token_ds = train_dataset.map(tokenizing, batched=True, remove_columns=train_dataset.column_names)
+#token_ds = train_dataset.map(tokenizing, batched=True, remove_columns=train_dataset.column_names)
+token_ds = tokenizing(train_dataset['question'],train_dataset['context'])
 model = AutoModelForQuestionAnswering.from_pretrained(model_path)
 
 
