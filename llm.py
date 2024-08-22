@@ -75,29 +75,59 @@ def cleaning_dataset(dataSet: pd.DataFrame) -> pd.DataFrame:
     return filtered_dataset
 
 
-#def tokenizing(examples):
-def tokenizing(context, question):
-    input =   tokenizer(#examples['question'],
-                      #examples['context'],
-                        question,
-                    context,
+def tokenizing(examples):
+#def tokenizing(context, question, answer_pos):
+    inputs = tokenizer(examples['question'],
+                      examples['context'],
                       max_length=384,
                       padding=True,
                       truncation=True,
                       add_special_tokens=True,
+                    return_offsets_mapping=True,
                       #is_split_into_words=True, # The sequence or batch of sequences to be encoded.
                                         # Each sequence can be a string or a list of strings (pretokenized string).
                                         # If the sequences are provided as list of strings (pretokenized),
                                         # you must set is_split_into_words=True (to lift the ambiguity with a batch of sequences).
                                 )
+
+    offset_mapping = inputs.pop('offset_mapping')
     start_pos = []
     end_pos = []
-    return input
+    for i, offset in enumerate(offset_mapping):
+        answer_start_end_position = examples['answer_pos'][i]
+        answer_start = int(re.split(',', answer_start_end_position)[0].strip())
+        answer_end = int(re.split(',', answer_start_end_position)[1].strip())
+        sequence_ids = inputs.sequence_ids(i)
+
+        index=0
+        while sequence_ids[index] != 1: #question token has '0'
+            index += 1
+        context_start = index
+
+        while sequence_ids[index] == 1: #context token has '1'
+            index += 1
+        context_end = index - 1
+
+        # If the answer is not fully inside the context, label it (0, 0)
+        if offset[context_start][0] > answer_end or offset[context_end][1] < answer_start :
+            start_pos.append(0)
+            end_pos.append(0)
+        else:
+            index = context_start
+            while index < context_end and offset[index][0] <= answer_start:
+                index += 1
+            start_pos.append(index-1)
+
+            while index >= context_start and offset[index][1] >= answer_end:
+                index -= 1
+            end_pos.append(index+1)
 
 
 
+    inputs["start_positions"] = start_pos
+    inputs["end_positions"] = end_pos
 
-
+    return inputs
 
 try:
     ds = pd.read_excel(file_path)
@@ -116,8 +146,8 @@ valid_ds = pd.DataFrame(final_dataSet, columns=valid_columms)
 
 train_dataset = datasets.Dataset.from_pandas(valid_ds)
 
-#token_ds = train_dataset.map(tokenizing, batched=True, remove_columns=train_dataset.column_names)
-token_ds = tokenizing(train_dataset['question'],train_dataset['context'])
+token_ds = train_dataset.map(tokenizing, batched=True, remove_columns=train_dataset.column_names)
+#token_ds = tokenizing(train_dataset['question'],train_dataset['context'], train_dataset['answer_pos'])
 model = AutoModelForQuestionAnswering.from_pretrained(model_path)
 
 
