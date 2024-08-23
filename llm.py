@@ -154,12 +154,14 @@ model = AutoModelForQuestionAnswering.from_pretrained(model_path)
 
 training_args = TrainingArguments(
     output_dir=f"fine_llm_result",
-    evaluation_strategy = "epoch",
+    #evaluation_strategy = "epoch",
+    evaluation_strategy = "no",
     learning_rate=2e-5,
     per_device_train_batch_size=8,
     per_device_eval_batch_size=8,
     num_train_epochs=2,
     weight_decay=0.01,
+    do_eval=False
 )
 
 
@@ -169,7 +171,7 @@ trainer = Trainer(
     train_dataset= token_ds,
     #eval_dataset=tokenized_datasets["validation"].select(range(100)),
     #data_collator=data_collator,
-    tokenizer=tokenizer
+    tokenizer=tokenizer,
     #train_dataset=small_train_dataset,
     #eval_dataset=small_eval_dataset,
     #compute_metrics=compute_metrics,
