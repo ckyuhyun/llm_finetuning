@@ -3,6 +3,7 @@ import os
 import re
 import datasets
 import numpy as np
+from datetime import datetime
 from transformers import (
     AutoTokenizer,
     AutoModelForQuestionAnswering,
@@ -10,6 +11,7 @@ from transformers import (
     Trainer)
 
 data_src_path = 'data_sets'
+trained_model_dic = "trained_model_dic"
 
 file_path = os.path.join(data_src_path, 'LLM_Materials.xlsx')
 
@@ -179,6 +181,10 @@ trainer = Trainer(
 
 trainer.train()
 
+if os.path.isdir(trained_model_dic):
+    os.mkdir(f'{trainer}')
+file_name = f"{datetime.now().year}_{datetime.now().month}_{datetime.now().day}{datetime.now().hour}_{datetime.now().minute}_llm_model"
+trainer.save_model(os.path.join(trained_model_dic, file_name))
 
 pass
 
