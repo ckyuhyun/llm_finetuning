@@ -17,8 +17,10 @@ pipe = pipeline("question-answering",
 
 
 context_collection = model.get_context_collection()
-
-pass
-# result = pipe(question="how to get the reusable content alert?", context=context)
-# print(f'answer : {result}')
+loop_index = 0
+for context in context_collection:
+    result = pipe(question="how to get the reusable content alert?", context=context)
+    # Min value and Max value of score is 0 and 1.
+    print(f'[{str(loop_index)}]answer : {result}')
+    loop_index += 1
 

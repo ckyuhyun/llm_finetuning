@@ -10,6 +10,8 @@ from transformers import (
     TrainingArguments,
     Trainer)
 
+from sklearn.metrics import f1_score
+
 
 class Data_Preprocessing:
     def __init__(self,
@@ -61,12 +63,15 @@ class Training_Model(Data_Preprocessing):
             raise f'{self.file_path} is not existed'
 
     def get_context_collection(self):
-        return self.train_dataset['context']
+        contexts = list(dict.fromkeys(self.train_dataset['context']))
+        return contexts
+
 
     def run(self,
             saving_trained_model=False):
         final_dataSet = self.__update_answer_pos()
         valid_ds = pd.DataFrame(final_dataSet, columns=self.valid_columms)
+
         self.train_dataset = datasets.Dataset.from_pandas(valid_ds)
 
         token_ds = self.train_dataset.map(self.tokenizing, batched=True, remove_columns=self.train_dataset.column_names)
@@ -82,10 +87,14 @@ class Training_Model(Data_Preprocessing):
             tokenizer=self.tokenizer,
             # train_dataset=small_train_dataset,
             # eval_dataset=small_eval_dataset,
-            # compute_metrics=compute_metrics,
+            compute_metrics=self.compute_metrics,
         )
 
+
         trainer.train()
+        # it requires eval_dataset
+        #results = trainer.evaluate()
+        #print(f'result : {results}')
 
         if saving_trained_model:
             if os.path.isdir(self.trained_model_dic):
@@ -95,7 +104,7 @@ class Training_Model(Data_Preprocessing):
 
     def set_tokenizer_configuration(self,
                                     output_dir=f"fine_llm_result",
-                                    evaluation_strategy="no",
+                                    evaluation_strategy="steps",
                                     learning_rate=2e-5,
                                     per_device_train_batch_size=8,
                                     per_device_eval_batch_size=8,
@@ -104,7 +113,10 @@ class Training_Model(Data_Preprocessing):
                                     do_eval=False):
         self.training_args = TrainingArguments(
             output_dir=output_dir,
-            # evaluation_strategy =evaluation_strategy ,
+            # evaluation_strategy
+            # "no" - No evaluation is done during training
+            # "steps" - Evaluation is done every each step
+            # "epoch" - Evaluation is done every epoch
             evaluation_strategy=evaluation_strategy,
             learning_rate=learning_rate,
             per_device_train_batch_size=per_device_train_batch_size,
@@ -113,6 +125,21 @@ class Training_Model(Data_Preprocessing):
             weight_decay=weight_decay,
             do_eval=do_eval
         )
+
+    def compute_metrics(self, pred):
+        squad_labels = pred.label_ids
+        squad_preds = pred.predictions.argmax(-1)
+
+        # Calculate Exact Match (EM)
+        em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
+
+        # Calculate F1-score
+        f1 = f1_score(squad_labels, squad_preds, average='macro')
+
+        return {
+            'exact_match': em,
+            'f1': f1
+        }
 
     def __update_answer_pos(self) -> pd.DataFrame:
         dataSet = self.preprocessed_ds
