@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import re
 import datasets
+import evaluate
 import numpy as np
 from datetime import datetime
 from transformers import (
@@ -56,6 +57,7 @@ class Training_Model(Data_Preprocessing):
         self.tokenizer = AutoTokenizer.from_pretrained(self.check_point)
         self.training_args = None
         self.valid_columms = ['context', 'question', 'answer', 'answer_pos']
+        #self.metric = evaluate.load("accuracy")
 
         super().__init__(self.data_src_path, self.file_path, self.trained_model_dic)
 
@@ -66,9 +68,10 @@ class Training_Model(Data_Preprocessing):
         contexts = list(dict.fromkeys(self.train_dataset['context']))
         return contexts
 
+    def get_tokenizer(self):
+        return self.train_dataset
 
-    def run(self,
-            saving_trained_model=False):
+    def run(self, saving_trained_model=False, evaluation_on=False):
         final_dataSet = self.__update_answer_pos()
         valid_ds = pd.DataFrame(final_dataSet, columns=self.valid_columms)
 
@@ -82,19 +85,20 @@ class Training_Model(Data_Preprocessing):
             model=model,
             args=self.training_args,
             train_dataset=token_ds,
-            # eval_dataset=tokenized_datasets["validation"].select(range(100)),
             # data_collator=data_collator,
             tokenizer=self.tokenizer,
             # train_dataset=small_train_dataset,
             # eval_dataset=small_eval_dataset,
-            compute_metrics=self.compute_metrics,
+            #compute_metrics=self.compute_metrics,
         )
-
+        if evaluation_on:
+            trainer.eval_dataset = token_ds
 
         trainer.train()
-        # it requires eval_dataset
-        #results = trainer.evaluate()
-        #print(f'result : {results}')
+
+        if evaluation_on:
+            results = trainer.evaluate()
+            print(f'result : {results}')
 
         if saving_trained_model:
             if os.path.isdir(self.trained_model_dic):
@@ -126,20 +130,24 @@ class Training_Model(Data_Preprocessing):
             do_eval=do_eval
         )
 
-    def compute_metrics(self, pred):
-        squad_labels = pred.label_ids
-        squad_preds = pred.predictions.argmax(-1)
 
-        # Calculate Exact Match (EM)
-        em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
-
-        # Calculate F1-score
-        f1 = f1_score(squad_labels, squad_preds, average='macro')
-
-        return {
-            'exact_match': em,
-            'f1': f1
-        }
+    #def compute_metrics(self, pred):
+        #logits, labels = pred
+        #prediction = np.argmax(logits, axis=-1)
+        #return self.metric(predictions=prediction, references=labels)
+        # squad_labels = pred.label_ids
+        # squad_preds = pred.predictions.argmax(-1)
+        #
+        # # Calculate Exact Match (EM)
+        # em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
+        #
+        # # Calculate F1-score
+        # f1 = f1_score(squad_labels, squad_preds, average='macro')
+        #
+        # return {
+        #     'exact_match': em,
+        #     'f1': f1
+        # }
 
     def __update_answer_pos(self) -> pd.DataFrame:
         dataSet = self.preprocessed_ds
