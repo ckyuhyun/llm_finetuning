@@ -1,4 +1,6 @@
 import os.path
+
+import docx2txt
 from transformers import pipeline
 from llm import Data_Preprocessing, Training_Model
 # from ray.train.torch import TorchTrainer
@@ -10,6 +12,46 @@ from llm import Data_Preprocessing, Training_Model
 # scaling_config = ScalingConfig(num_workers=2, use_gpu=True)
 # trainer = TorchTrainer(train_func, scaling_config=scaling_config)
 # result = trainer.fit()
+
+
+category_list = ["Dashboard", "Locations"]
+
+def check_get_category(content) -> (bool, str):
+    for c in category_list:
+        if content in c:
+            return True, content
+    return False, ''
+
+
+def update_reference():
+    my_text = docx2txt.process(os.path.join("data_sets", "Training Notes.docx"))
+
+    contents = my_text.split("\n\n")
+    context = {}
+    category_content = ''
+    start_new_key = False
+    start_content_update = False
+    ignore_content = True
+    previous_category = None
+    for c in contents:
+        if '\t' not in c:
+            isCategory, category = check_get_category(c)
+            if isCategory:
+                if category_content != '':
+                    context[previous_category] = category_content
+                start_new_key = True
+                start_content_update = False
+                category_content = ''
+                previous_category = category
+
+            if start_new_key and start_content_update:
+                category_content += f'{c}\n'
+
+            if start_new_key and not start_content_update:
+                start_content_update = True
+
+
+update_reference()
 
 
 model = Training_Model()
@@ -45,5 +87,4 @@ for context in context_collection:
     # Min value and Max value of score is 0 and 1.
     print(f'[{str(loop_index)}]answer : {result}')
     loop_index += 1
-
 
