@@ -47,6 +47,13 @@ def update_reference():
             current_category = category
         else:
             if current_category not in context.keys():
-                context[current_category] = None
+                context[current_category] = ''
+                category_content = f'{c}\n'
             else:
                 category_content += f'{c}\n'
+
+
+    df = pd.DataFrame.from_dict(context, orient='index')
+    df.to_csv('context_file.csv')
+
+
