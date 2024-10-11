@@ -2,3 +2,9 @@
 distilbert-base-uncased-lora-text-classification/checkpoint*/
 
 .idea/
+
+fine_llm_result/runs/Sep08_23-00-09_TedPC/
+
+*.TedPC
+
+*.bin
