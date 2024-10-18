@@ -91,7 +91,16 @@ class Training_Model(distilbert_base_uncased_model,
         self.train_dataset = datasets.Dataset.from_pandas(valid_ds)
 
     def get_completed_answer(self, hint_answer):
-        return [answer for answer in self.train_dataset['answer'] if hint_answer in answer][0]
+        answer_list = [answer for answer in self.train_dataset['answer'] if hint_answer in answer]
+
+        # if there is no answer
+        if len(answer_list) == 0:
+            return None
+        # for debug purpose
+        if len(answer_list) > 1:
+            raise Exception('too many')
+
+        return answer_list[0]
 
 
     def get_tokenizer(self):
@@ -118,7 +127,7 @@ class Training_Model(distilbert_base_uncased_model,
             tokenizer=self.tokenizer,
             # train_dataset=small_train_dataset,
             # eval_dataset=small_eval_dataset,
-            # compute_metrics=self.compute_metrics,
+            #compute_metrics=self.compute_metrics,
         )
         if evaluation_on:
             trainer.eval_dataset = self.token_ds
@@ -162,22 +171,22 @@ class Training_Model(distilbert_base_uncased_model,
         )
 
     # def compute_metrics(self, pred):
-    # logits, labels = pred
-    # prediction = np.argmax(logits, axis=-1)
-    # return self.metric(predictions=prediction, references=labels)
-    # squad_labels = pred.label_ids
-    # squad_preds = pred.predictions.argmax(-1)
+    #     logits, labels = pred
+    #     prediction = np.argmax(logits, axis=-1)
+    #     return self.metric(predictions=prediction, references=labels)
+    #     squad_labels = pred.label_ids
+    #     squad_preds = pred.predictions.argmax(-1)
     #
-    # # Calculate Exact Match (EM)
-    # em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
+    #     # Calculate Exact Match (EM)
+    #     em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
     #
-    # Calculate F1-score
-    # f1 = f1_score(squad_labels, squad_preds, average='macro')
+    #     Calculate F1-score
+    #     f1 = f1_score(squad_labels, squad_preds, average='macro')
     #
-    # return {
-    #     'exact_match': em,
-    #     'f1': f1
-    # }
+    #     return {
+    #         'exact_match': em,
+    #         'f1': f1
+    #     }
 
     def __update_answer_pos(self) -> pd.DataFrame:
         dataSet = self.data_Preprocessing.get_preprocess_ds()
