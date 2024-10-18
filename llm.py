@@ -1,10 +1,10 @@
+from logging import exception
 from typing import Optional
+from colorama import Fore, Back, Style
 import pandas as pd
 import os
 import re
 import datasets
-import evaluate
-import numpy as np
 from datetime import datetime
 from transformers import (
     AutoTokenizer,
@@ -55,10 +55,12 @@ class Training_Model(distilbert_base_uncased_model,
     def __init__(self,
                  data_src_path='data_sets',
                  src_file_name='LLM_Materials.xlsx',
-                 trained_model_dic='trained_model_dic'):
+                 trained_model_dic=None,
+                 token_ds_dic=None):
         self.data_src_path = data_src_path
         self.file_path = os.path.join(self.data_src_path, src_file_name)
         self.trained_model_dic = trained_model_dic
+        self.token_ds_dic = token_ds_dic
         # self.check_point = check_point
         # self.tokenizer = AutoTokenizer.from_pretrained(self.check_point)
         self.training_args = None
@@ -68,6 +70,8 @@ class Training_Model(distilbert_base_uncased_model,
         self.checkpoint = None
         self.tokenizer = None
         self.token_ds = None
+        self.token_ds_name = "token_ds.csv"
+        self.saving_trained_model = None
         # self.metric = evaluate.load("accuracy")
 
         self.data_Preprocessing = Data_Preprocessing(self.data_src_path, self.file_path, self.trained_model_dic)
@@ -111,13 +115,21 @@ class Training_Model(distilbert_base_uncased_model,
         return contexts
 
     def get_tokenizing_ds(self):
-        return self.token_ds
+        return self.token_ds if self.saving_trained_model else pd.read_csv(os.path.join(self.token_ds_dic, self.token_ds_name))
 
     def run(self, saving_trained_model=False, evaluation_on=False) \
             -> Optional[str]:
         self.token_ds = self.train_dataset.map(self.tokenizing, batched=True, remove_columns=self.train_dataset.column_names)
+        self.saving_trained_model = saving_trained_model
         # token_ds = tokenizing(train_dataset['question'],train_dataset['context'], train_dataset['answer_pos'])
         # model = AutoModelForQuestionAnswering.from_pretrained(self.check_point)
+
+        if self.saving_trained_model:
+            if not os.path.isdir(self.token_ds_dic):
+                os.mkdir(f'{self.token_ds_dic}')
+            #file_name = f"{datetime.now().year}_{datetime.now().month}_{datetime.now().day}{datetime.now().hour}_{datetime.now().minute}_token_ds"
+            self.token_ds.to_csv(os.path.join(self.token_ds_dic, self.token_ds_name), sep=',', index=False, encoding='utf-8')
+            #self.token_ds.save_to_disk(os.path.join(self.token_ds_dic, file_name))
 
         trainer = Trainer(
             model=self.model,
@@ -134,9 +146,15 @@ class Training_Model(distilbert_base_uncased_model,
 
         trainer.train()
 
+        (best_epic , best_eval_loss) =  self.__get_epoch_of_best_eval_loss(trainer.state.log_history)
+
         if evaluation_on:
             results = trainer.evaluate()
-            print(f'result : {results}')
+
+            print(Fore.GREEN  + f'### Evaluation Result ###')
+            print(Fore.GREEN  + f'Best Epic : {best_epic}')
+            print(Fore.GREEN + f'Best evaluation loss : {best_eval_loss}')
+            print(Fore.GREEN + f'Final evaluation loss : {results.get('eval_loss')}\n')
 
         if saving_trained_model:
             if not os.path.isdir(self.trained_model_dic):
@@ -187,6 +205,21 @@ class Training_Model(distilbert_base_uncased_model,
     #         'exact_match': em,
     #         'f1': f1
     #     }
+
+    def __get_epoch_of_best_eval_loss(self, trainer_log_history:list) \
+            -> (float, float) :
+        best_epic = None
+        best_epic_eval_loss = None
+        for log in trainer_log_history:
+            try:
+                if best_epic is None or ('eval_loss' in log.keys() and log.get('eval_loss') < best_epic_eval_loss):
+                    best_epic = log.get('epoch')
+                    best_epic_eval_loss = log.get('eval_loss')
+            except:
+                raise exception('')
+
+        return best_epic, best_epic_eval_loss
+
 
     def __update_answer_pos(self) -> pd.DataFrame:
         dataSet = self.data_Preprocessing.get_preprocess_ds()

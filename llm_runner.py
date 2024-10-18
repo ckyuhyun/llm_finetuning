@@ -17,13 +17,13 @@ from util.context_generator import update_reference, generate_question_answers_d
 
 retrain_enable = False
 trained_model_dic = "trained_model_dic"
+token_ds_dic='token_ds_dic'
 
-
-def get_latest_created_model():
+def get_latest_created_model(folder_name:str):
     current_path = os.path.abspath(os.getcwd())
-    sub_dir_path = trained_model_dic
+    sub_dir_path = folder_name
     last_created_dir = None
-    for dir_name in os.listdir(trained_model_dic):
+    for dir_name in os.listdir(folder_name):
         created_date = os.path.getctime(os.path.join(current_path, sub_dir_path, dir_name))
         if last_created_dir is None:
             last_created_dir = dir_name
@@ -39,8 +39,10 @@ def get_latest_created_model():
 #generate_question_answers_dataset()
 
 
-model = Training_Model(src_file_name="alertApprove.xlsx")
-#model = Training_Model()
+model = Training_Model(src_file_name="alertApprove.xlsx",
+                       trained_model_dic=trained_model_dic,
+                       token_ds_dic=token_ds_dic)
+
 model.set(model_list.distilbert_base_uncased)
 
 
@@ -49,20 +51,22 @@ model.set_tokenizer_configuration(
     do_eval=True,
     evaluation_strategy="epoch",
     learning_rate= 5e-5,
-    num_train_epochs=100)
+    num_train_epochs=1000)
 
 
 # Training
 model_dir_name = None
 if bool(retrain_enable):
     model_dir_name = model.run(saving_trained_model=True,
-                          evaluation_on=True)
+                               evaluation_on=True)
 else:
-    model_dir_name = get_latest_created_model()
+    model_dir_name = get_latest_created_model(trained_model_dic)
 
+
+token_ds = model.get_tokenizing_ds()
 pipe = pipeline("question-answering",
                 #model="distilbert/distilbert-base-uncased",
-                token=model.get_tokenizing_ds(),
+                token= token_ds,
                 model=os.path.join(trained_model_dic, model_dir_name)
                 )
 
