@@ -1,5 +1,6 @@
 from logging import exception
 from typing import Optional
+import numpy as np
 from colorama import Fore, Back, Style
 import pandas as pd
 import os
@@ -10,7 +11,8 @@ from transformers import (
     AutoTokenizer,
     AutoModelForQuestionAnswering,
     TrainingArguments,
-    Trainer)
+    Trainer,
+    AdamW)
 
 from sklearn.metrics import f1_score
 from model.distilbert_base_uncased import distilbert_base_uncased_model
@@ -69,6 +71,7 @@ class Training_Model(distilbert_base_uncased_model,
         self.model = None
         self.checkpoint = None
         self.tokenizer = None
+        self.optimizer  = None
         self.token_ds = None
         self.token_ds_name = "token_ds.csv"
         self.saving_trained_model = None
@@ -135,26 +138,27 @@ class Training_Model(distilbert_base_uncased_model,
             model=self.model,
             args=self.training_args,
             train_dataset=self.token_ds,
+            # eval_dataset=small_eval_dataset,
             # data_collator=data_collator,
             tokenizer=self.tokenizer,
-            # train_dataset=small_train_dataset,
-            # eval_dataset=small_eval_dataset,
-            #compute_metrics=self.compute_metrics,
+            optimizers=(self.optimizer, None),
+            compute_metrics=self.compute_metrics,
         )
         if evaluation_on:
             trainer.eval_dataset = self.token_ds
 
         trainer.train()
 
-        (best_epic , best_eval_loss) =  self.__get_epoch_of_best_eval_loss(trainer.state.log_history)
+        (best_epic , best_eval_loss) = self.__get_epoch_of_best_eval_loss(trainer.state.log_history)
 
         if evaluation_on:
             results = trainer.evaluate()
+            eval_loss = results.get('eval_loss')
 
             print(Fore.GREEN  + f'### Evaluation Result ###')
             print(Fore.GREEN  + f'Best Epic : {best_epic}')
             print(Fore.GREEN + f'Best evaluation loss : {best_eval_loss}')
-            print(Fore.GREEN + f'Final evaluation loss : {results.get('eval_loss')}\n')
+            print(Fore.GREEN + f'Final evaluation loss : {eval_loss}\n')
 
         if saving_trained_model:
             if not os.path.isdir(self.trained_model_dic):
@@ -180,7 +184,7 @@ class Training_Model(distilbert_base_uncased_model,
             # "steps" - Evaluation is done every each step
             # "epoch" - Evaluation is done every epoch
             evaluation_strategy=evaluation_strategy,
-            learning_rate=learning_rate,
+            #learning_rate=learning_rate,
             per_device_train_batch_size=per_device_train_batch_size,
             per_device_eval_batch_size=per_device_eval_batch_size,
             num_train_epochs=num_train_epochs,
@@ -188,23 +192,26 @@ class Training_Model(distilbert_base_uncased_model,
             do_eval=do_eval
         )
 
-    # def compute_metrics(self, pred):
-    #     logits, labels = pred
-    #     prediction = np.argmax(logits, axis=-1)
-    #     return self.metric(predictions=prediction, references=labels)
-    #     squad_labels = pred.label_ids
-    #     squad_preds = pred.predictions.argmax(-1)
-    #
-    #     # Calculate Exact Match (EM)
-    #     em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
-    #
-    #     Calculate F1-score
-    #     f1 = f1_score(squad_labels, squad_preds, average='macro')
-    #
-    #     return {
-    #         'exact_match': em,
-    #         'f1': f1
-    #     }
+        self.optimizer = AdamW(self.model.parameters(), lr=learning_rate)
+
+
+    def compute_metrics(self, pred):
+        # logits, labels = pred
+        # prediction = np.argmax(logits, axis=-1)
+        # return self.metric(predictions=prediction, references=labels)
+        squad_labels = pred.label_ids
+        squad_preds = np.argmax(pred.predictions, axis=-1)
+
+        # Calculate Exact Match (EM)
+        em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
+
+        #Calculate F1-score
+        f1 = f1_score(squad_labels, squad_preds, average='macro')
+
+        return {
+            'exact_match': em,
+            'f1': f1
+        }
 
     def __get_epoch_of_best_eval_loss(self, trainer_log_history:list) \
             -> (float, float) :
