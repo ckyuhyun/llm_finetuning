@@ -142,7 +142,7 @@ class Training_Model(distilbert_base_uncased_model,
             # data_collator=data_collator,
             tokenizer=self.tokenizer,
             optimizers=(self.optimizer, None),
-            compute_metrics=self.compute_metrics,
+            #compute_metrics=self.compute_metrics,
         )
         if evaluation_on:
             trainer.eval_dataset = self.token_ds
@@ -162,7 +162,7 @@ class Training_Model(distilbert_base_uncased_model,
 
         if saving_trained_model:
             if not os.path.isdir(self.trained_model_dic):
-                os.mkdir(f'{self.trained_model_dic}')
+                os.mkdir(f'{self.trained_model_dic}')   
             file_name = f"{datetime.now().year}_{datetime.now().month}_{datetime.now().day}{datetime.now().hour}_{datetime.now().minute}_llm_model"
             trainer.save_model(os.path.join(self.trained_model_dic, file_name))
 
@@ -203,13 +203,13 @@ class Training_Model(distilbert_base_uncased_model,
         squad_preds = np.argmax(pred.predictions, axis=-1)
 
         # Calculate Exact Match (EM)
-        em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
+        #em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
 
         #Calculate F1-score
         f1 = f1_score(squad_labels, squad_preds, average='macro')
 
         return {
-            'exact_match': em,
+            #'exact_match': em,
             'f1': f1
         }
 

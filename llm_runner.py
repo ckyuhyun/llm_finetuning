@@ -15,7 +15,7 @@ from util.context_generator import update_reference, generate_question_answers_d
 # result = trainer.fit()
 
 
-retrain_enable = False
+retrain_enable = True
 trained_model_dic = "trained_model_dic"
 token_ds_dic='token_ds_dic'
 
@@ -51,7 +51,7 @@ model.set_tokenizer_configuration(
     do_eval=True,
     evaluation_strategy="epoch",
     learning_rate= 5e-5,
-    num_train_epochs=1000)
+    num_train_epochs=100)
 
 
 # Training
