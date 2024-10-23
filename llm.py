@@ -5,7 +5,7 @@ from colorama import Fore, Back, Style
 import pandas as pd
 import os
 import re
-import datasets
+from datasets import Dataset, load_metric
 from datetime import datetime
 from transformers import (
     AutoTokenizer,
@@ -13,6 +13,10 @@ from transformers import (
     TrainingArguments,
     Trainer,
     AdamW)
+import torch
+
+from ray.tune.search.hyperopt import HyperOptSearch
+from ray.tune.schedulers import ASHAScheduler
 
 from sklearn.metrics import f1_score
 from model.distilbert_base_uncased import distilbert_base_uncased_model
@@ -59,6 +63,9 @@ class Training_Model(distilbert_base_uncased_model,
                  src_file_name='LLM_Materials.xlsx',
                  trained_model_dic=None,
                  token_ds_dic=None):
+        #self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
         self.data_src_path = data_src_path
         self.file_path = os.path.join(self.data_src_path, src_file_name)
         self.trained_model_dic = trained_model_dic
@@ -68,6 +75,7 @@ class Training_Model(distilbert_base_uncased_model,
         self.training_args = None
         self.train_dataset = None
         self.valid_columms = ['context', 'question', 'answer', 'answer_pos']
+        self.trainer = None
         self.model = None
         self.checkpoint = None
         self.tokenizer = None
@@ -75,6 +83,7 @@ class Training_Model(distilbert_base_uncased_model,
         self.token_ds = None
         self.token_ds_name = "token_ds.csv"
         self.saving_trained_model = None
+        self.metrics = load_metric('glue', 'mrpc')
         # self.metric = evaluate.load("accuracy")
 
         self.data_Preprocessing = Data_Preprocessing(self.data_src_path, self.file_path, self.trained_model_dic)
@@ -92,10 +101,17 @@ class Training_Model(distilbert_base_uncased_model,
         self.checkpoint = model.check_point
         self.tokenizer = model.tokenizer
 
-        final_dataSet = self.__update_answer_pos()
-        valid_ds = pd.DataFrame(final_dataSet, columns=self.valid_columms)
+        final_data_set = self.__update_answer_pos()
+        valid_ds = pd.DataFrame(final_data_set, columns=self.valid_columms)
 
-        self.train_dataset = datasets.Dataset.from_pandas(valid_ds)
+        self.train_dataset = Dataset.from_pandas(valid_ds)
+
+    def module_init(self):
+        #self.model.to(self.device)
+        #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        #model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
+        #model.To(device)
+        return self.model
 
     def get_completed_answer(self, hint_answer):
         answer_list = [answer for answer in self.train_dataset['answer'] if hint_answer in answer]
@@ -134,8 +150,8 @@ class Training_Model(distilbert_base_uncased_model,
             self.token_ds.to_csv(os.path.join(self.token_ds_dic, self.token_ds_name), sep=',', index=False, encoding='utf-8')
             #self.token_ds.save_to_disk(os.path.join(self.token_ds_dic, file_name))
 
-        trainer = Trainer(
-            model=self.model,
+        self.trainer = Trainer(
+            model=self.module_init,
             args=self.training_args,
             train_dataset=self.token_ds,
             # eval_dataset=small_eval_dataset,
@@ -144,15 +160,20 @@ class Training_Model(distilbert_base_uncased_model,
             optimizers=(self.optimizer, None),
             #compute_metrics=self.compute_metrics,
         )
-        if evaluation_on:
-            trainer.eval_dataset = self.token_ds
 
-        trainer.train()
-
-        (best_epic , best_eval_loss) = self.__get_epoch_of_best_eval_loss(trainer.state.log_history)
+        self.__update_hyperparameter_tune()
 
         if evaluation_on:
-            results = trainer.evaluate()
+            self.trainer.eval_dataset = self.token_ds
+
+
+
+        self.trainer.train()
+
+        (best_epic , best_eval_loss) = self.__get_epoch_of_best_eval_loss(self.trainer.state.log_history)
+
+        if evaluation_on:
+            results = self.trainer.evaluate()
             eval_loss = results.get('eval_loss')
 
             print(Fore.GREEN  + f'### Evaluation Result ###')
@@ -164,7 +185,7 @@ class Training_Model(distilbert_base_uncased_model,
             if not os.path.isdir(self.trained_model_dic):
                 os.mkdir(f'{self.trained_model_dic}')   
             file_name = f"{datetime.now().year}_{datetime.now().month}_{datetime.now().day}{datetime.now().hour}_{datetime.now().minute}_llm_model"
-            trainer.save_model(os.path.join(self.trained_model_dic, file_name))
+            self.trainer.save_model(os.path.join(self.trained_model_dic, file_name))
 
         return file_name if saving_trained_model else None
 
@@ -199,19 +220,31 @@ class Training_Model(distilbert_base_uncased_model,
         # logits, labels = pred
         # prediction = np.argmax(logits, axis=-1)
         # return self.metric(predictions=prediction, references=labels)
-        squad_labels = pred.label_ids
-        squad_preds = np.argmax(pred.predictions, axis=-1)
+        #squad_labels = pred.label_ids
+        predictions, labels = pred
+
+        predictions = predictions.argmax(axis=-1)
 
         # Calculate Exact Match (EM)
         #em = sum([1 if p == l else 0 for p, l in zip(squad_preds, squad_labels)]) / len(squad_labels)
 
         #Calculate F1-score
-        f1 = f1_score(squad_labels, squad_preds, average='macro')
+        return self.metrics.compute(predictions=predictions, references=labels)
 
-        return {
-            #'exact_match': em,
-            'f1': f1
-        }
+
+    def __update_hyperparameter_tune(self):
+        self.trainer.hyperparameter_search(
+            direction="maximize",
+            backend="ray",
+            # Choose among many libraries:
+            # https://docs.ray.io/en/latest/tune/api_docs/suggestion.html
+            search_alg=HyperOptSearch(metric="objective", mode="max"),
+            # Choose among schedulers:
+            # https://docs.ray.io/en/latest/tune/api_docs/schedulers.html
+            scheduler=ASHAScheduler(metric="objective", mode="max"))
+
+
+
 
     def __get_epoch_of_best_eval_loss(self, trainer_log_history:list) \
             -> (float, float) :
