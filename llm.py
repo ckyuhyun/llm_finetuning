@@ -82,7 +82,8 @@ class Training_Model(distilbert_base_uncased_model,
         self.checkpoint = None
         self.tokenizer = None
         self.optimizer  = None
-        self.token_ds = None
+        self.train_token_ds = None
+        self.valid_token_ds = None
         self.token_ds_name = "token_ds.csv"
         self.saving_trained_model = None
         self.metrics = load_metric('glue', 'mrpc')
@@ -107,6 +108,7 @@ class Training_Model(distilbert_base_uncased_model,
         valid_ds = pd.DataFrame(final_data_set, columns=self.valid_columms)
 
         self.train_dataset = Dataset.from_pandas(valid_ds)
+        #self.train_dataset.split()
 
 
 
@@ -131,7 +133,7 @@ class Training_Model(distilbert_base_uncased_model,
         return contexts
 
     def get_tokenizing_ds(self):
-        return self.token_ds if self.saving_trained_model else pd.read_csv(os.path.join(self.token_ds_dic, self.token_ds_name))
+        return self.train_token_ds if self.saving_trained_model else pd.read_csv(os.path.join(self.token_ds_dic, self.token_ds_name))
 
     def model_init(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -142,7 +144,9 @@ class Training_Model(distilbert_base_uncased_model,
 
     def run(self, saving_trained_model=False, evaluation_on=False) \
             -> Optional[str]:
-        self.token_ds = self.train_dataset.map(self.tokenizing, batched=True, remove_columns=self.train_dataset.column_names)
+        train_valid_ds = self.train_dataset.train_test_split(test_size=0.3)
+        self.train_token_ds = train_valid_ds['train'].map(self.tokenizing, batched=True, remove_columns=self.train_dataset.column_names)
+        self.valid_token_ds = train_valid_ds['test'].map(self.tokenizing, batched=True, remove_columns=self.train_dataset.column_names)
         self.saving_trained_model = saving_trained_model
         # token_ds = tokenizing(train_dataset['question'],train_dataset['context'], train_dataset['answer_pos'])
         # model = AutoModelForQuestionAnswering.from_pretrained(self.check_point)
@@ -151,15 +155,15 @@ class Training_Model(distilbert_base_uncased_model,
             if not os.path.isdir(self.token_ds_dic):
                 os.mkdir(f'{self.token_ds_dic}')
             #file_name = f"{datetime.now().year}_{datetime.now().month}_{datetime.now().day}{datetime.now().hour}_{datetime.now().minute}_token_ds"
-            self.token_ds.to_csv(os.path.join(self.token_ds_dic, self.token_ds_name), sep=',', index=False, encoding='utf-8')
+            self.train_token_ds.to_csv(os.path.join(self.token_ds_dic, self.token_ds_name), sep=',', index=False, encoding='utf-8')
             #self.token_ds.save_to_disk(os.path.join(self.token_ds_dic, file_name))
 
         self.trainer = Trainer(
             #model=self.model,
             model_init=self.model_init,
             args=self.training_args,
-            train_dataset=self.token_ds,
-            # eval_dataset=small_eval_dataset,
+            train_dataset=self.train_token_ds,
+            eval_dataset=self.valid_token_ds,
             # data_collator=data_collator,
             tokenizer=self.tokenizer,
             #optimizers=(self.optimizer, None),
@@ -169,7 +173,7 @@ class Training_Model(distilbert_base_uncased_model,
         self.__update_hyperparameter_tune()
 
         if evaluation_on:
-            self.trainer.eval_dataset = self.token_ds
+            self.trainer.eval_dataset = self.train_token_ds
 
 
 
