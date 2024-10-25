@@ -22,6 +22,10 @@ import torch
 from ray.tune.search.hyperopt import HyperOptSearch
 from ray.tune.schedulers import ASHAScheduler
 
+import ray.train.huggingface.transformers
+from ray.train import ScalingConfig
+from ray.train.torch import TorchTrainer
+
 from sklearn.metrics import f1_score
 from model.distilbert_base_uncased import distilbert_base_uncased_model
 from model.t5_base_question_generator import T5_base_question_generate_model
@@ -84,13 +88,13 @@ class Training_Model(distilbert_base_uncased_model,
         self.trainer = None
         self.model = None
         self.checkpoint = None
-        self.tokenizer = None
-        self.optimizer  = None
-        self.train_token_ds = None
-        self.valid_token_ds = None
+        self.__tokenizer__ = None
+        self.__optimizer__  = None
+        self.__train_token_ds__ = None
+        self.__valid_token_ds__ = None
         self.token_ds_name = "token_ds.csv"
         self.saving_trained_model = None
-        self.metrics = load('precision') # load("accuracy")
+        self.metrics = None # load('precision') # load("accuracy")
 
 
         self.data_Preprocessing = Data_Preprocessing(self.data_src_path, self.file_path, self.trained_model_dic)
@@ -106,7 +110,7 @@ class Training_Model(distilbert_base_uncased_model,
 
         self.model = model.model
         self.checkpoint = model.check_point
-        self.tokenizer = model.tokenizer
+        self.__tokenizer__ = model.__tokenizer__
 
         final_data_set = self.__update_answer_pos()
         valid_ds = pd.DataFrame(final_data_set, columns=self.valid_columns)
@@ -130,14 +134,14 @@ class Training_Model(distilbert_base_uncased_model,
 
 
     def get_tokenizer(self):
-        return self.tokenizer
+        return self.__tokenizer__
 
     def get_context_collection(self):
         contexts = list(dict.fromkeys(self.train_dataset['context']))
         return contexts
 
     def get_tokenizing_ds(self):
-        return self.train_token_ds if self.saving_trained_model else pd.read_csv(os.path.join(self.token_ds_dic, self.token_ds_name))
+        return self.__train_token_ds__ if self.saving_trained_model else pd.read_csv(os.path.join(self.token_ds_dic, self.token_ds_name))
 
     def model_init(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -149,9 +153,12 @@ class Training_Model(distilbert_base_uncased_model,
     def run(self, saving_trained_model=False, evaluation_on=False) \
             -> Optional[str]:
         train_valid_ds = self.train_dataset.train_test_split(test_size=0.3)
-        self.train_token_ds = train_valid_ds['train'].map(self.tokenizing, batched=True, remove_columns=self.train_dataset.column_names)
-        self.valid_token_ds = train_valid_ds['test'].map(self.tokenizing, batched=True, remove_columns=self.train_dataset.column_names)
+        self.__train_token_ds__ = train_valid_ds['train'].map(self.__tokenizing__, batched=True, remove_columns=self.train_dataset.column_names)
+        self.__valid_token_ds__ = train_valid_ds['test'].map(self.__tokenizing__, batched=True, remove_columns=self.train_dataset.column_names)
         self.saving_trained_model = saving_trained_model
+
+        # this metrics must be implemented in this training function.
+        self.metrics =  load('precision')
         # token_ds = tokenizing(train_dataset['question'],train_dataset['context'], train_dataset['answer_pos'])
         # model = AutoModelForQuestionAnswering.from_pretrained(self.check_point)
 
@@ -159,29 +166,36 @@ class Training_Model(distilbert_base_uncased_model,
             if not os.path.isdir(self.token_ds_dic):
                 os.mkdir(f'{self.token_ds_dic}')
             #file_name = f"{datetime.now().year}_{datetime.now().month}_{datetime.now().day}{datetime.now().hour}_{datetime.now().minute}_token_ds"
-            self.train_token_ds.to_csv(os.path.join(self.token_ds_dic, self.token_ds_name), sep=',', index=False, encoding='utf-8')
+            self.__train_token_ds__.to_csv(os.path.join(self.token_ds_dic, self.token_ds_name), sep=',', index=False, encoding='utf-8')
             #self.token_ds.save_to_disk(os.path.join(self.token_ds_dic, file_name))
 
         self.trainer = Trainer(
             #model=self.model,
             model_init=self.model_init,
             args=self.training_args,
-            train_dataset=self.train_token_ds,
-            eval_dataset=self.valid_token_ds,
+            train_dataset=self.__train_token_ds__,
+            eval_dataset=self.__valid_token_ds__,
             # data_collator=data_collator,
-            tokenizer=self.tokenizer,
+            tokenizer=self.__tokenizer__,
             #optimizers=(self.optimizer, None),
             #compute_metrics=self.compute_metrics,
         )
 
-        self.__update_hyperparameter_tune()
+        #self.__update_hyperparameter_tune()
 
         if evaluation_on:
-            self.trainer.eval_dataset = self.train_token_ds
+            self.trainer.eval_dataset = self.__train_token_ds__
 
+        # Report Metrics and Checkpoints to Ray Train
+        callback = ray.train.huggingface.transformers.RayTrainReportCallback()
+        self.trainer.add_callback(callback)
 
+        # Prepare Transformers Trainer
+        self.trainer = ray.train.huggingface.transformers.prepare_trainer(self.trainer)
 
         self.trainer.train()
+
+
 
         (best_epic , best_eval_loss) = self.__get_epoch_of_best_eval_loss(self.trainer.state.log_history)
 
@@ -202,15 +216,33 @@ class Training_Model(distilbert_base_uncased_model,
 
         return file_name if saving_trained_model else None
 
-    def set_tokenizer_configuration(self,
-                                    output_dir=f"fine_llm_result",
-                                    evaluation_strategy="steps",
-                                    learning_rate=2e-5,
-                                    per_device_train_batch_size=8,
-                                    per_device_eval_batch_size=8,
-                                    num_train_epochs=2,
-                                    weight_decay=0.01,
-                                    do_eval=False):
+
+    def run_ray_tune(self):
+        ray_trainer = TorchTrainer(
+            self.run,
+            scaling_config=ScalingConfig(num_workers=2, use_gpu=False)
+        )
+        result : ray.train.Result = ray_trainer.fit()
+
+        # Load the trained model
+        with result.checkpoint.as_directory() as checkpoint_dir:
+            checkpoint_path = os.path.join(
+                checkpoint_dir,
+                ray.train.huggingface.transformers.RayTrainReportCallback.CHECKPOINT_NAME,
+            )
+            self.model =AutoModelForQuestionAnswering.from_pretrained(checkpoint_path)
+
+
+
+    def __set_tokenizer_configuration__(self,
+                                        output_dir=f"fine_llm_result",
+                                        evaluation_strategy="steps",
+                                        learning_rate=2e-5,
+                                        per_device_train_batch_size=8,
+                                        per_device_eval_batch_size=8,
+                                        num_train_epochs=2,
+                                        weight_decay=0.01,
+                                        do_eval=False):
         self.training_args = TrainingArguments(
             output_dir=output_dir,
             # evaluation_strategy
@@ -326,19 +358,19 @@ class Training_Model(distilbert_base_uncased_model,
 
         return new_ds
 
-    def tokenizing(self, examples):
-        inputs = self.tokenizer(examples['question'],
-                                examples['context'],
-                                max_length=384,
-                                padding=True,
-                                truncation=True,
-                                add_special_tokens=True,
-                                return_offsets_mapping=True,
-                                # is_split_into_words=True, # The sequence or batch of sequences to be encoded.
-                                # Each sequence can be a string or a list of strings (pretokenized string).
-                                # If the sequences are provided as list of strings (pretokenized),
-                                # you must set is_split_into_words=True (to lift the ambiguity with a batch of sequences).
-                                )
+    def __tokenizing__(self, examples):
+        inputs = self.__tokenizer__(examples['question'],
+                                    examples['context'],
+                                    max_length=384,
+                                    padding=True,
+                                    truncation=True,
+                                    add_special_tokens=True,
+                                    return_offsets_mapping=True,
+                                    # is_split_into_words=True, # The sequence or batch of sequences to be encoded.
+                                    # Each sequence can be a string or a list of strings (pretokenized string).
+                                    # If the sequences are provided as list of strings (pretokenized),
+                                    # you must set is_split_into_words=True (to lift the ambiguity with a batch of sequences).
+                                    )
 
         offset_mapping = inputs.pop('offset_mapping')
         start_pos = []

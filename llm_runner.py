@@ -15,7 +15,7 @@ from util.context_generator import update_reference, generate_question_answers_d
 # result = trainer.fit()
 
 
-retrain_enable = True
+retrain_enable = False
 trained_model_dic = "trained_model_dic"
 token_ds_dic='token_ds_dic'
 
@@ -47,7 +47,7 @@ model.set(model_list.distilbert_base_uncased)
 
 
 # Train configuration setting
-model.set_tokenizer_configuration(
+model.__set_tokenizer_configuration__(
     do_eval=True,
     evaluation_strategy="epoch",
     learning_rate= 5e-5,
@@ -56,11 +56,14 @@ model.set_tokenizer_configuration(
 
 # Training
 model_dir_name = None
+
+model.run_ray_tune()
 if bool(retrain_enable):
     model_dir_name = model.run(saving_trained_model=True,
                                evaluation_on=True)
 else:
     model_dir_name = get_latest_created_model(trained_model_dic)
+
 
 
 token_ds = model.get_tokenizing_ds()

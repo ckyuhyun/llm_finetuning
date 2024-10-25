@@ -11,4 +11,4 @@ class T5_base_question_generate_model:
     def __init__(self):
         self.check_point = "iarfmoose/t5-base-question-generator"
         self.model =AutoModelForSeq2SeqLM.from_pretrained(self.check_point, token=config_parser.huggingface_token_acess),
-        self.tokenizer = AutoTokenizer.from_pretrained(self.check_point, token=config_parser.huggingface_token_acess, use_fast=False)
+        self.__tokenizer__ = AutoTokenizer.from_pretrained(self.check_point, token=config_parser.huggingface_token_acess, use_fast=False)
