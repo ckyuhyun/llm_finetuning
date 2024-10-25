@@ -7,6 +7,9 @@ import os
 import re
 from datasets import Dataset, load_metric
 from datetime import datetime
+from evaluate import load
+
+from pandas.core.computation.expressions import evaluate
 from transformers import (
     AutoTokenizer,
     AutoModelForQuestionAnswering,
@@ -14,6 +17,7 @@ from transformers import (
     Trainer,
     AdamW)
 import torch
+
 
 from ray.tune.search.hyperopt import HyperOptSearch
 from ray.tune.schedulers import ASHAScheduler
@@ -76,7 +80,7 @@ class Training_Model(distilbert_base_uncased_model,
         # self.tokenizer = AutoTokenizer.from_pretrained(self.check_point)
         self.training_args = None
         self.train_dataset = None
-        self.valid_columms = ['context', 'question', 'answer', 'answer_pos']
+        self.valid_columns = ['context', 'question', 'answer', 'answer_pos']
         self.trainer = None
         self.model = None
         self.checkpoint = None
@@ -86,8 +90,8 @@ class Training_Model(distilbert_base_uncased_model,
         self.valid_token_ds = None
         self.token_ds_name = "token_ds.csv"
         self.saving_trained_model = None
-        self.metrics = load_metric('glue', 'mrpc')
-        # self.metric = evaluate.load("accuracy")
+        self.metrics = load('precision') # load("accuracy")
+
 
         self.data_Preprocessing = Data_Preprocessing(self.data_src_path, self.file_path, self.trained_model_dic)
 
@@ -105,7 +109,7 @@ class Training_Model(distilbert_base_uncased_model,
         self.tokenizer = model.tokenizer
 
         final_data_set = self.__update_answer_pos()
-        valid_ds = pd.DataFrame(final_data_set, columns=self.valid_columms)
+        valid_ds = pd.DataFrame(final_data_set, columns=self.valid_columns)
 
         self.train_dataset = Dataset.from_pandas(valid_ds)
         #self.train_dataset.split()
@@ -222,7 +226,7 @@ class Training_Model(distilbert_base_uncased_model,
             do_eval=do_eval
         )
 
-        self.optimizer = AdamW(self.model.parameters(), lr=learning_rate)
+        #self.optimizer = AdamW(self.model.parameters(), lr=learning_rate)
 
 
     def compute_metrics(self, pred):
@@ -244,7 +248,7 @@ class Training_Model(distilbert_base_uncased_model,
     def __update_hyperparameter_tune(self):
         self.trainer.hyperparameter_search(
             direction="maximize",
-            backend="ray",
+            backend="ray", #"optuna"
             # Choose among many libraries:
             # https://docs.ray.io/en/latest/tune/api_docs/suggestion.html
             search_alg=HyperOptSearch(metric="objective", mode="max"),
