@@ -56,6 +56,8 @@ class Data_Preprocessing:
         return filtered_dataset
 
 
+
+
 class Training_Model(distilbert_base_uncased_model,
                      T5_base_question_generate_model):
     def __init__(self,
@@ -106,12 +108,7 @@ class Training_Model(distilbert_base_uncased_model,
 
         self.train_dataset = Dataset.from_pandas(valid_ds)
 
-    def module_init(self):
-        #self.model.to(self.device)
-        #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        #model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
-        #model.To(device)
-        return self.model
+
 
     def get_completed_answer(self, hint_answer):
         answer_list = [answer for answer in self.train_dataset['answer'] if hint_answer in answer]
@@ -136,6 +133,13 @@ class Training_Model(distilbert_base_uncased_model,
     def get_tokenizing_ds(self):
         return self.token_ds if self.saving_trained_model else pd.read_csv(os.path.join(self.token_ds_dic, self.token_ds_name))
 
+    def model_init(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
+        model.to(device)
+        # model.To(device)
+        return model
+
     def run(self, saving_trained_model=False, evaluation_on=False) \
             -> Optional[str]:
         self.token_ds = self.train_dataset.map(self.tokenizing, batched=True, remove_columns=self.train_dataset.column_names)
@@ -151,13 +155,14 @@ class Training_Model(distilbert_base_uncased_model,
             #self.token_ds.save_to_disk(os.path.join(self.token_ds_dic, file_name))
 
         self.trainer = Trainer(
-            model=self.module_init,
+            #model=self.model,
+            model_init=self.model_init,
             args=self.training_args,
             train_dataset=self.token_ds,
             # eval_dataset=small_eval_dataset,
             # data_collator=data_collator,
             tokenizer=self.tokenizer,
-            optimizers=(self.optimizer, None),
+            #optimizers=(self.optimizer, None),
             #compute_metrics=self.compute_metrics,
         )
 
