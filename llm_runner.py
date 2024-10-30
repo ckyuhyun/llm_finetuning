@@ -15,7 +15,7 @@ from util.context_generator import update_reference, generate_question_answers_d
 # result = trainer.fit()
 
 
-retrain_enable = False
+retrain_enable = True
 trained_model_dic = "trained_model_dic"
 token_ds_dic='token_ds_dic'
 

@@ -9,6 +9,8 @@ from datasets import Dataset, load_metric
 from datetime import datetime
 from evaluate import load
 
+
+
 from pandas.core.computation.expressions import evaluate
 from transformers import (
     AutoTokenizer,
@@ -16,7 +18,9 @@ from transformers import (
     TrainingArguments,
     Trainer,
     AdamW)
+
 import torch
+from torch.cuda import device_count
 
 
 from ray.tune.search.hyperopt import HyperOptSearch
@@ -30,6 +34,7 @@ from sklearn.metrics import f1_score
 from model.distilbert_base_uncased import distilbert_base_uncased_model
 from model.t5_base_question_generator import T5_base_question_generate_model
 from model.model_list import model_list
+
 
 
 class Data_Preprocessing:
@@ -73,8 +78,8 @@ class Training_Model(distilbert_base_uncased_model,
                  src_file_name='LLM_Materials.xlsx',
                  trained_model_dic=None,
                  token_ds_dic=None):
-        #self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        #self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")'
+        torch.cuda.is_available = lambda : False
 
         self.data_src_path = data_src_path
         self.file_path = os.path.join(self.data_src_path, src_file_name)
@@ -94,13 +99,15 @@ class Training_Model(distilbert_base_uncased_model,
         self.__valid_token_ds__ = None
         self.token_ds_name = "token_ds.csv"
         self.saving_trained_model = None
-        self.metrics = None # load('precision') # load("accuracy")
-
+        self.metrics = None
 
         self.data_Preprocessing = Data_Preprocessing(self.data_src_path, self.file_path, self.trained_model_dic)
 
         if not os.path.isfile(self.file_path):
             raise f'{self.file_path} is not existed'
+
+        self.gpu_count = device_count()
+        print(f'GPU count : {self.gpu_count}')
 
     def set(self, model: model_list):
         if model is model_list.distilbert_base_uncased:
@@ -144,11 +151,14 @@ class Training_Model(distilbert_base_uncased_model,
         return self.__train_token_ds__ if self.saving_trained_model else pd.read_csv(os.path.join(self.token_ds_dic, self.token_ds_name))
 
     def model_init(self):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = "cpu"  #torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
         model.to(device)
         # model.To(device)
         return model
+
+    def set_metrics(self, config='precision'):
+        self.metrics = load(config)  # 'precision' or "accuracy"
 
     def run(self, saving_trained_model=False, evaluation_on=False) \
             -> Optional[str]:
@@ -158,7 +168,8 @@ class Training_Model(distilbert_base_uncased_model,
         self.saving_trained_model = saving_trained_model
 
         # this metrics must be implemented in this training function.
-        self.metrics =  load('precision')
+        self.set_metrics()
+
         # token_ds = tokenizing(train_dataset['question'],train_dataset['context'], train_dataset['answer_pos'])
         # model = AutoModelForQuestionAnswering.from_pretrained(self.check_point)
 
@@ -217,9 +228,12 @@ class Training_Model(distilbert_base_uncased_model,
         return file_name if saving_trained_model else None
 
 
+
+
+
     def run_ray_tune(self):
         ray_trainer = TorchTrainer(
-            self.run,
+            train_loop_per_worker=self.run,
             scaling_config=ScalingConfig(num_workers=2, use_gpu=False)
         )
         result : ray.train.Result = ray_trainer.fit()
