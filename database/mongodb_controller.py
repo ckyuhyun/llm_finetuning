@@ -1,7 +1,7 @@
 from typing import Optional
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
-import utility
+from util import utility
 
 DEBUG_MODE = True
 
