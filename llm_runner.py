@@ -57,7 +57,7 @@ model.__set_tokenizer_configuration__(
 # Training
 model_dir_name = None
 
-model.run_ray_tune()
+#model.run_ray_tune()
 if bool(retrain_enable):
     model_dir_name = model.run(saving_trained_model=True,
                                evaluation_on=True)

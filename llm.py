@@ -108,6 +108,7 @@ class Training_Model(distilbert_base_uncased_model,
 
         self.gpu_count = device_count()
         print(f'GPU count : {self.gpu_count}')
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
     def set(self, model: model_list):
         if model is model_list.distilbert_base_uncased:
@@ -157,18 +158,19 @@ class Training_Model(distilbert_base_uncased_model,
         # model.To(device)
         return model
 
-    def set_metrics(self, config='precision'):
+    def __set_metrics__(self, config='precision'):
         self.metrics = load(config)  # 'precision' or "accuracy"
 
-    def run(self, saving_trained_model=False, evaluation_on=False) \
-            -> Optional[str]:
+    def run(self,
+            saving_trained_model=False,
+            evaluation_on=False) -> Optional[str]:
         train_valid_ds = self.train_dataset.train_test_split(test_size=0.3)
         self.__train_token_ds__ = train_valid_ds['train'].map(self.__tokenizing__, batched=True, remove_columns=self.train_dataset.column_names)
         self.__valid_token_ds__ = train_valid_ds['test'].map(self.__tokenizing__, batched=True, remove_columns=self.train_dataset.column_names)
         self.saving_trained_model = saving_trained_model
 
         # this metrics must be implemented in this training function.
-        self.set_metrics()
+        self.__set_metrics__()
 
         # token_ds = tokenizing(train_dataset['question'],train_dataset['context'], train_dataset['answer_pos'])
         # model = AutoModelForQuestionAnswering.from_pretrained(self.check_point)
@@ -206,8 +208,6 @@ class Training_Model(distilbert_base_uncased_model,
 
         self.trainer.train()
 
-
-
         (best_epic , best_eval_loss) = self.__get_epoch_of_best_eval_loss(self.trainer.state.log_history)
 
         if evaluation_on:
@@ -221,7 +221,7 @@ class Training_Model(distilbert_base_uncased_model,
 
         if saving_trained_model:
             if not os.path.isdir(self.trained_model_dic):
-                os.mkdir(f'{self.trained_model_dic}')   
+                os.mkdir(f'{self.trained_model_dic}')
             file_name = f"{datetime.now().year}_{datetime.now().month}_{datetime.now().day}{datetime.now().hour}_{datetime.now().minute}_llm_model"
             self.trainer.save_model(os.path.join(self.trained_model_dic, file_name))
 
@@ -232,9 +232,14 @@ class Training_Model(distilbert_base_uncased_model,
 
 
     def run_ray_tune(self):
+
+        ray.init(configure_logging=False)
+
         ray_trainer = TorchTrainer(
             train_loop_per_worker=self.run,
-            scaling_config=ScalingConfig(num_workers=2, use_gpu=False)
+            scaling_config=ScalingConfig(num_workers=1,
+                                         use_gpu=True)
+                                         #resources_per_worker={"GPU":1})
         )
         result : ray.train.Result = ray_trainer.fit()
 
@@ -244,7 +249,7 @@ class Training_Model(distilbert_base_uncased_model,
                 checkpoint_dir,
                 ray.train.huggingface.transformers.RayTrainReportCallback.CHECKPOINT_NAME,
             )
-            self.model =AutoModelForQuestionAnswering.from_pretrained(checkpoint_path)
+            self.model = AutoModelForQuestionAnswering.from_pretrained(checkpoint_path)
 
 
 
