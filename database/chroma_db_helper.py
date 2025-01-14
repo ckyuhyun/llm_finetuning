@@ -8,7 +8,7 @@ import numpy as np
 from numpy.linalg import norm
 
 
-os.environ['hf_token'] = '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'
+
 
 
 text_chunks = [

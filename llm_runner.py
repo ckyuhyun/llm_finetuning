@@ -47,11 +47,11 @@ model.set(model_list.distilbert_base_uncased)
 
 
 # Train configuration setting
-model.__set_tokenizer_configuration__(
+model.set_tokenizer_configuration(
     do_eval=True,
     evaluation_strategy="epoch",
     learning_rate= 5e-5,
-    num_train_epochs=100)
+    num_train_epochs=10)
 
 
 # Training

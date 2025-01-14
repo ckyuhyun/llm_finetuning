@@ -8,3 +8,11 @@ fine_llm_result/runs/Sep08_23-00-09_TedPC/
 *.TedPC
 
 *.bin
+
+fine_llm_result/checkpoint-500/
+
+fine_llm_result/checkpoint-1500/
+
+fine_llm_result/checkpoint-2000/
+
+my_awesome_qa_model/checkpoint-1000/
