@@ -24,7 +24,7 @@ import random
 
 
 from huggingface_hub.hf_api import HfFolder
-HfFolder.save_token('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')
+#HfFolder.save_token()
 
 
 # if not os.path.exists('squard'):
