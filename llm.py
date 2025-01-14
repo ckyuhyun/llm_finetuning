@@ -253,15 +253,15 @@ class Training_Model(distilbert_base_uncased_model,
 
 
 
-    def __set_tokenizer_configuration__(self,
-                                        output_dir=f"fine_llm_result",
-                                        evaluation_strategy="steps",
-                                        learning_rate=2e-5,
-                                        per_device_train_batch_size=8,
-                                        per_device_eval_batch_size=8,
-                                        num_train_epochs=2,
-                                        weight_decay=0.01,
-                                        do_eval=False):
+    def set_tokenizer_configuration(self,
+                                    output_dir=f"fine_llm_result",
+                                    evaluation_strategy="steps",
+                                    learning_rate=2e-5,
+                                    per_device_train_batch_size=8,
+                                    per_device_eval_batch_size=8,
+                                    num_train_epochs=2,
+                                    weight_decay=0.01,
+                                    do_eval=False):
         self.training_args = TrainingArguments(
             output_dir=output_dir,
             # evaluation_strategy
